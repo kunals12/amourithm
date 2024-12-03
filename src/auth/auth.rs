@@ -1,9 +1,11 @@
 use super::SuccessResponse;
 use actix_web::{HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 pub struct Register {
+    username: String,
     email: String,
     password: String,
 }
