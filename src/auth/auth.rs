@@ -1,7 +1,6 @@
+use super::SuccessResponse;
 use actix_web::{HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
-
-use super::SuccessResponse;
 
 #[derive(Serialize, Deserialize)]
 pub struct Register {
