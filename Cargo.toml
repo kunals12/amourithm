@@ -4,3 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+actix-web = "4.9.0"
+bcrypt = "0.15.1"
+jsonwebtoken = "9.3.0"
+rand = "0.8.5"
+serde = { version = "1.0.215", features = ["derive"] }
+sqlx = { version = "0.8.2", features = [
+    "mysql",
+    "runtime-tokio",
+    "tls-native-tls",
+] }
+strum = "0.26.3"
+strum_macros = "0.26.4"
+tokio = { version = "1.41.1", features = ["macros", "rt-multi-thread"] }
