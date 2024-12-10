@@ -39,22 +39,18 @@ pub fn generate_token(id: uuid::Uuid) -> String {
     .expect("Error generating token")
 }
 
-// Function to validate (verify) a JWT token
-fn verify_token(token: &str) -> Result<TokenData<Claims>, jsonwebtoken::errors::Error> {
-    let secret_key =
-        env::var("COOKIES_SECRET_KEY").expect("COOKIES_SECRET_KEY must be set in the .env file");
-    decode(
-        token,
-        &DecodingKey::from_secret(secret_key.as_bytes()), // Decode using the same secret key
-        &Validation::default(), // Use default validation (e.g., check expiry)
-    )
-}
-
 // Middleware-like function to validate token and extract user data
 pub async fn validate_token(req: HttpRequest) -> Result<uuid::Uuid, HttpResponse> {
     if let Some(cookie) = req.cookie("auth_token") {
         let token = cookie.value();
-        let verified_token = verify_token(token);
+        let secret_key = env::var("COOKIES_SECRET_KEY")
+            .expect("COOKIES_SECRET_KEY must be set in the .env file");
+        let verified_token = decode::<Claims>(
+            token,
+            &DecodingKey::from_secret(secret_key.as_bytes()), // Decode using the same secret key
+            &Validation::default(), // Use default validation (e.g., check expiry)
+        );
+
         match verified_token {
             Ok(data) => {
                 let user_id = data.claims.sub;

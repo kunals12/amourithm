@@ -6,7 +6,7 @@ pub mod utils;
 
 #[derive(Serialize)]
 pub struct SuccessResponse<T> {
-    success: bool,
-    message: String,
-    data: Option<T>,
+    pub success: bool,
+    pub message: String,
+    pub data: Option<T>,
 }

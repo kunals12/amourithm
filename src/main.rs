@@ -1,11 +1,13 @@
 use actix_web::{
-    web::{get, post, Data},
+    web::{get, patch, post, Data},
     App, HttpResponse, HttpServer, Responder,
 };
 mod auth;
 use auth::Register;
 use database::database_connection;
 mod database;
+mod user;
+use user::User;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -17,8 +19,12 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(Data::new(database.clone()))
             .route("/", get().to(hello_world))
+            // Auth Routes
             .route("/api/v1/auth/signup", post().to(Register::register_user))
             .route("/api/v1/auth/signin", post().to(Register::login_user))
+            .route("/api/v1/auth/user", get().to(Register::get_user))
+            // User Routes
+            .route("/api/v1/user/update", patch().to(User::update_user_details))
     })
     .bind(("127.0.0.1", 8080))?
     .run();

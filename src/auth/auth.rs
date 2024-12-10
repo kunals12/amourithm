@@ -1,12 +1,12 @@
 use super::{
-    jwt::generate_token,
+    jwt::{generate_token, validate_token},
     utils::{decrypt_password, encrypt_password},
     SuccessResponse,
 };
 use actix_web::{
     cookie::{time::Duration, Cookie, SameSite},
     web::{Data, Json},
-    HttpResponse, Responder,
+    HttpRequest, HttpResponse, Responder,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{prelude::FromRow, PgPool};
@@ -37,6 +37,7 @@ impl Register {
             .bind(username)
             .fetch_one(&**db)
             .await
+            // .map_err(|_| HttpResponse::InternalServerError().finish())?
             .unwrap_or(false)
     }
 
@@ -127,6 +128,17 @@ impl Register {
                     data: None,
                 })
             }
+        }
+    }
+
+    pub async fn get_user(db: Data<PgPool>, req: HttpRequest) -> impl Responder {
+        match validate_token(req).await {
+            Ok(user_id) => HttpResponse::Ok().json(SuccessResponse {
+                success: true,
+                message: "Token validated successfully".to_string(),
+                data: Some(user_id),
+            }),
+            Err(err) => err,
         }
     }
 }
