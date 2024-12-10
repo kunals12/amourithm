@@ -2,8 +2,8 @@
 CREATE SCHEMA IF NOT EXISTS amourithm;
 
 -- Create the users table in the "amourithm" schema
-CREATE TABLE IF NOT EXISTS amourithm.users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),  -- Use UUID with default generation
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY,  -- Use UUID with default generation
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,           -- Email field, increased size for flexibility
     password VARCHAR(256) NOT NULL,               -- Password field with larger size to handle hashed passwords
@@ -13,9 +13,9 @@ CREATE TABLE IF NOT EXISTS amourithm.users (
 );
 
 -- Create the usersdata table to store additional user information
-CREATE TABLE IF NOT EXISTS amourithm.usersdata (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES amourithm.users(id) ON DELETE CASCADE,  -- Foreign key to users table
+CREATE TABLE IF NOT EXISTS usersdata (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,  -- Foreign key to users table
     firstname VARCHAR(50) NULL,
     lastname VARCHAR(50) NULL,
     age INT CHECK (age >= 18),  -- Age must be 18 or older (common in dating apps)
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS amourithm.usersdata (
 );
 
 -- Optionally, create an index on the username for performance
-CREATE INDEX IF NOT EXISTS idx_username ON amourithm.users(username);
+CREATE INDEX IF NOT EXISTS idx_username ON users(username);
 
 -- Optionally, create an index on the user_id for faster lookup in the usersdata table
-CREATE INDEX IF NOT EXISTS idx_user_id ON amourithm.usersdata(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_id ON usersdata(user_id);
