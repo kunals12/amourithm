@@ -27,6 +27,12 @@ pub struct Register {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct VerifyOtp {
+    email: String,
+    otp: String,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct Login {
     username: String,
     password: String,
@@ -112,6 +118,73 @@ impl Register {
                 message: e.to_string(),
                 data: None,
             }),
+        }
+    }
+
+    pub async fn verify_otp(
+        redis: Data<Arc<Mutex<MultiplexedConnection>>>,
+        verify_otp_dto: Json<VerifyOtp>,
+    ) -> impl Responder {
+        println!("{:?}", verify_otp_dto);
+        let mut redis_conn = redis.lock().await;
+        let redis_key = format!("otp:{}", verify_otp_dto.email); // Use a unique key
+        let get_otp: Result<Option<String>, redis::RedisError> =
+            redis_conn.get(redis_key.clone()).await;
+
+        match get_otp {
+            Ok(Some(stored_otp)) => {
+                if stored_otp == verify_otp_dto.otp {
+                    // OTP is correct, delete the OTP key after successful verification
+                    let delete_key: Result<i64, redis::RedisError> =
+                        redis_conn.del(redis_key.clone()).await;
+                    match delete_key {
+                        Ok(deleted) if deleted > 0 => {
+                            return HttpResponse::Ok().json(SuccessResponse::<()> {
+                                success: true,
+                                message: "OTP verified successfully".to_string(),
+                                data: None,
+                            });
+                        }
+                        Ok(_) => {
+                            // The key was not deleted (unlikely scenario if it's there)
+                            HttpResponse::InternalServerError().json(SuccessResponse::<()> {
+                                success: false,
+                                message: "Failed to delete OTP from Redis".to_string(),
+                                data: None,
+                            })
+                        }
+                        Err(_) => HttpResponse::BadRequest().json(SuccessResponse::<()> {
+                            success: false,
+                            message: "Invalid OTP".to_string(),
+                            data: None,
+                        }),
+                    }
+                } else {
+                    // OTP doesn't match
+                    HttpResponse::BadRequest().json(SuccessResponse::<()> {
+                        success: false,
+                        message: "Invalid OTP".to_string(),
+                        data: None,
+                    })
+                }
+            }
+            Ok(None) => {
+                // OTP was not found in Redis (e.g., expired or not set)
+                HttpResponse::BadRequest().json(SuccessResponse::<()> {
+                    success: false,
+                    message: "OTP not found or expired".to_string(),
+                    data: None,
+                })
+            }
+            Err(e) => {
+                println!("{}", e);
+                // If Redis returns an error (e.g., key doesn't exist)
+                HttpResponse::InternalServerError().json(SuccessResponse::<()> {
+                    success: false,
+                    message: e.to_string(),
+                    data: None,
+                })
+            }
         }
     }
 

@@ -33,6 +33,7 @@ async fn main() -> std::io::Result<()> {
             // Auth Routes
             .route("/api/v1/auth/signup", post().to(Register::register_user))
             .route("/api/v1/auth/signin", post().to(Register::login_user))
+            .route("/api/v1/auth/verify-otp", post().to(Register::verify_otp))
             .route("/api/v1/auth/user", get().to(Register::get_user))
             // User Routes
             .route("/api/v1/user/update", patch().to(User::update_user_details))
