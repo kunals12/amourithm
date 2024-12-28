@@ -1,3 +1,7 @@
+use std::{fmt::format, sync::Arc};
+
+use crate::connect_to_redis;
+
 use super::{
     jwt::{generate_token, validate_token},
     utils::{decrypt_password, encrypt_password},
@@ -8,8 +12,11 @@ use actix_web::{
     web::{Data, Json},
     HttpRequest, HttpResponse, Responder,
 };
+use rand::Rng;
+use redis::{aio::MultiplexedConnection, AsyncCommands};
 use serde::{Deserialize, Serialize};
 use sqlx::{prelude::FromRow, PgPool};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
@@ -41,7 +48,11 @@ impl Register {
             .unwrap_or(false)
     }
 
-    pub async fn register_user(db: Data<PgPool>, user: Json<Register>) -> impl Responder {
+    pub async fn register_user(
+        db: Data<PgPool>,
+        redis: Data<Arc<Mutex<MultiplexedConnection>>>,
+        user: Json<Register>,
+    ) -> impl Responder {
         let is_user_exists = Self::check_user_existance(db.clone(), &user.username).await;
 
         if is_user_exists {
@@ -55,6 +66,30 @@ impl Register {
         let user_id = Uuid::new_v4();
 
         let hash_password = encrypt_password(&user.password);
+
+        let otp = Register::get_otp().to_string();
+
+        // Store OTP in Redis with an expiration of 30 seconds
+        let redis_key = format!("otp:{}", user.email); // Use a unique key
+                                                       // Lock the Redis connection before using it
+        let mut redis_conn = redis.lock().await;
+        let redis_key_set = redis_conn
+            .set_ex::<&str, &str, ()>(&redis_key, &otp, 30)
+            .await;
+        // Store otp in redis cache for 30 sec
+        match redis_key_set {
+            Ok(_) => println!("OTP stored successfully! OTP is {}", otp),
+            Err(e) => {
+                eprintln!("Failed to store OTP in Redis: {}", e);
+                return HttpResponse::InternalServerError().json(SuccessResponse::<()> {
+                    success: false,
+                    message: "Failed to generate OTP".to_string(),
+                    data: None,
+                });
+            }
+        }
+
+        // TODO: Send mail to user with otp
 
         let user = sqlx::query(
             "INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4)",
@@ -140,5 +175,10 @@ impl Register {
             }),
             Err(err) => err,
         }
+    }
+
+    fn get_otp() -> u32 {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(100000..999999)
     }
 }

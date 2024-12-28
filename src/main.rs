@@ -1,23 +1,34 @@
+use std::sync::Arc;
 use actix_web::{
     web::{get, patch, post, Data},
     App, HttpResponse, HttpServer, Responder,
 };
 mod auth;
 use auth::Register;
-use database::database_connection;
-mod database;
+mod connections;
+use connections::*;
 mod user;
+use ::redis::aio::MultiplexedConnection;
+use tokio::sync::Mutex;
+use sqlx::{Pool, Postgres};
 use user::User;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let database = database_connection()
+    let database: Pool<Postgres> = database_connection()
         .await
         .expect("Failed to connect to database");
     println!("Database Connection Established");
+    let redis: Arc<Mutex<MultiplexedConnection>> = connect_to_redis().await.expect("Failed to connect to redis");
+    // Share RedisService with the app
+    let redis_service_data = Data::new(redis);
+    
+    println!("Redis Connection Established");
+
     let server = HttpServer::new(move || {
         App::new()
             .app_data(Data::new(database.clone()))
+            .app_data(redis_service_data.clone())
             .route("/", get().to(hello_world))
             // Auth Routes
             .route("/api/v1/auth/signup", post().to(Register::register_user))
