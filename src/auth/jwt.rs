@@ -6,7 +6,7 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, 
 use serde::{Deserialize, Serialize};
 use std::env;
 
-use super::SuccessResponse;
+use crate::common::ResponseToSend;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Claims {
@@ -58,7 +58,7 @@ pub async fn validate_token(req: HttpRequest) -> Result<uuid::Uuid, HttpResponse
             }
             Err(e) => {
                 // Handle invalid token
-                Err(HttpResponse::Unauthorized().json(SuccessResponse::<()> {
+                Err(HttpResponse::Unauthorized().json(ResponseToSend::<()> {
                     success: false,
                     message: format!("Invalid token: {}", e), // Serialize the error
                     data: None,
@@ -67,7 +67,7 @@ pub async fn validate_token(req: HttpRequest) -> Result<uuid::Uuid, HttpResponse
         }
     } else {
         // Handle missing token
-        Err(HttpResponse::Unauthorized().json(SuccessResponse::<()> {
+        Err(HttpResponse::Unauthorized().json(ResponseToSend::<()> {
             success: false,
             message: "Missing token".to_string(),
             data: None,

@@ -6,7 +6,7 @@ use serde::Deserialize;
 use sqlx::PgPool;
 use strum_macros::Display;
 
-use crate::auth::{jwt::validate_token, SuccessResponse};
+use crate::{auth::jwt::validate_token, common::ResponseToSend};
 
 #[derive(Display, Deserialize)]
 enum Gender {
@@ -82,12 +82,12 @@ impl User {
                 let response = sqlx::query(&query).bind(user_id).execute(&**db).await;
 
                 match response {
-                    Ok(_) => HttpResponse::Ok().json(SuccessResponse::<()> {
+                    Ok(_) => HttpResponse::Ok().json(ResponseToSend::<()> {
                         success: true,
                         message: "User Updated".to_string(),
                         data: None,
                     }),
-                    Err(e) => HttpResponse::InternalServerError().json(SuccessResponse::<()> {
+                    Err(e) => HttpResponse::InternalServerError().json(ResponseToSend::<()> {
                         success: false,
                         message: e.to_string(),
                         data: None,

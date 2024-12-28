@@ -12,6 +12,7 @@ use ::redis::aio::MultiplexedConnection;
 use tokio::sync::Mutex;
 use sqlx::{Pool, Postgres};
 use user::User;
+mod common;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {

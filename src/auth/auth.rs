@@ -1,11 +1,13 @@
 use std::{fmt::format, sync::Arc};
 
-use crate::connect_to_redis;
+use crate::{
+    common::{handle_bad_request, handle_conflict_error, handle_internal_server_error, ResponseToSend},
+    connect_to_redis,
+};
 
 use super::{
     jwt::{generate_token, validate_token},
     utils::{decrypt_password, encrypt_password},
-    SuccessResponse,
 };
 use actix_web::{
     cookie::{time::Duration, Cookie, SameSite},
@@ -62,11 +64,7 @@ impl Register {
         let is_user_exists = Self::check_user_existance(db.clone(), &user.username).await;
 
         if is_user_exists {
-            return HttpResponse::Ok().json(SuccessResponse::<()> {
-                success: true,
-                message: "User Already Exists".to_string(),
-                data: None,
-            });
+            return handle_conflict_error("User Already Exists");
         }
 
         let user_id = Uuid::new_v4();
@@ -84,40 +82,32 @@ impl Register {
             .await;
         // Store otp in redis cache for 30 sec
         match redis_key_set {
-            Ok(_) => println!("OTP stored successfully! OTP is {}", otp),
-            Err(e) => {
-                eprintln!("Failed to store OTP in Redis: {}", e);
-                return HttpResponse::InternalServerError().json(SuccessResponse::<()> {
-                    success: false,
-                    message: "Failed to generate OTP".to_string(),
-                    data: None,
-                });
+            Ok(_) => {
+                // TODO: Send mail to user with otp
+
+                // Store user in db
+                let user = sqlx::query(
+                    "INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4)",
+                )
+                .bind(user_id)
+                .bind(user.username.clone())
+                .bind(user.email.clone())
+                .bind(hash_password)
+                .execute(&**db)
+                .await;
+
+                match user {
+                    Ok(_) => HttpResponse::Created().json(ResponseToSend::<()> {
+                        success: true,
+                        message: "Email Sent Successfully".to_string(),
+                        data: None,
+                    }),
+                    Err(e) => handle_internal_server_error(&e.to_string())
+                }
             }
-        }
-
-        // TODO: Send mail to user with otp
-
-        let user = sqlx::query(
-            "INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4)",
-        )
-        .bind(user_id)
-        .bind(user.username.clone())
-        .bind(user.email.clone())
-        .bind(hash_password)
-        .execute(&**db)
-        .await;
-
-        match user {
-            Ok(_) => HttpResponse::Created().json(SuccessResponse::<()> {
-                success: true,
-                message: "Email Sent Successfully".to_string(),
-                data: None,
-            }),
-            Err(e) => HttpResponse::InternalServerError().json(SuccessResponse::<()> {
-                success: false,
-                message: e.to_string(),
-                data: None,
-            }),
+            Err(_) => {
+                return handle_bad_request("Failed to generate OTP");
+            }
         }
     }
 
@@ -125,7 +115,6 @@ impl Register {
         redis: Data<Arc<Mutex<MultiplexedConnection>>>,
         verify_otp_dto: Json<VerifyOtp>,
     ) -> impl Responder {
-        println!("{:?}", verify_otp_dto);
         let mut redis_conn = redis.lock().await;
         let redis_key = format!("otp:{}", verify_otp_dto.email); // Use a unique key
         let get_otp: Result<Option<String>, redis::RedisError> =
@@ -139,51 +128,23 @@ impl Register {
                         redis_conn.del(redis_key.clone()).await;
                     match delete_key {
                         Ok(deleted) if deleted > 0 => {
-                            return HttpResponse::Ok().json(SuccessResponse::<()> {
+                            return HttpResponse::Ok().json(ResponseToSend::<()> {
                                 success: true,
                                 message: "OTP verified successfully".to_string(),
                                 data: None,
                             });
                         }
-                        Ok(_) => {
-                            // The key was not deleted (unlikely scenario if it's there)
-                            HttpResponse::InternalServerError().json(SuccessResponse::<()> {
-                                success: false,
-                                message: "Failed to delete OTP from Redis".to_string(),
-                                data: None,
-                            })
-                        }
-                        Err(_) => HttpResponse::BadRequest().json(SuccessResponse::<()> {
-                            success: false,
-                            message: "Invalid OTP".to_string(),
-                            data: None,
-                        }),
+                        Ok(_) => handle_internal_server_error("Failed to delete OTP from Redis"),
+                        Err(_) => handle_bad_request("Invalid OTP"),
                     }
                 } else {
-                    // OTP doesn't match
-                    HttpResponse::BadRequest().json(SuccessResponse::<()> {
-                        success: false,
-                        message: "Invalid OTP".to_string(),
-                        data: None,
-                    })
+                    handle_bad_request("Invalid OTP")
                 }
             }
-            Ok(None) => {
-                // OTP was not found in Redis (e.g., expired or not set)
-                HttpResponse::BadRequest().json(SuccessResponse::<()> {
-                    success: false,
-                    message: "OTP not found or expired".to_string(),
-                    data: None,
-                })
-            }
+            Ok(None) => handle_bad_request("OTP not found or expired"),
             Err(e) => {
                 println!("{}", e);
-                // If Redis returns an error (e.g., key doesn't exist)
-                HttpResponse::InternalServerError().json(SuccessResponse::<()> {
-                    success: false,
-                    message: e.to_string(),
-                    data: None,
-                })
+                handle_internal_server_error(&e.to_string())
             }
         }
     }
@@ -205,7 +166,7 @@ impl Register {
                 let is_password_match = decrypt_password(&body.password.clone(), &user.password);
 
                 if !is_password_match {
-                    return HttpResponse::BadRequest().json(SuccessResponse::<()> {
+                    return HttpResponse::BadRequest().json(ResponseToSend::<()> {
                         success: false,
                         message: "Password Not Matched".to_string(),
                         data: None,
@@ -222,7 +183,7 @@ impl Register {
                     .same_site(SameSite::Strict)
                     .finish();
 
-                HttpResponse::Ok().cookie(cookie).json(SuccessResponse {
+                HttpResponse::Ok().cookie(cookie).json(ResponseToSend {
                     success: true,
                     message: "Signin Successfully".to_string(),
                     data: Some(token),
@@ -230,7 +191,7 @@ impl Register {
             }
             Err(e) => {
                 println!("{}", e);
-                HttpResponse::NotFound().json(SuccessResponse::<()> {
+                HttpResponse::NotFound().json(ResponseToSend::<()> {
                     success: false,
                     message: e.to_string(),
                     data: None,
@@ -241,7 +202,7 @@ impl Register {
 
     pub async fn get_user(db: Data<PgPool>, req: HttpRequest) -> impl Responder {
         match validate_token(req).await {
-            Ok(user_id) => HttpResponse::Ok().json(SuccessResponse {
+            Ok(user_id) => HttpResponse::Ok().json(ResponseToSend {
                 success: true,
                 message: "Token validated successfully".to_string(),
                 data: Some(user_id),
