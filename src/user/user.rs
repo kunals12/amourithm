@@ -170,6 +170,24 @@ impl User {
                     }
                 }
 
+                // Update Gender
+                if let Some(gender) = &user.gender {
+                    let gender_str = match gender {
+                        Gender::Male => "Male",
+                        Gender::Female => "Female",
+                        Gender::Other => "Other",
+                    };
+
+                    // Update the gender in the database
+                    response = sqlx::query(
+                                        "UPDATE usersdata SET gender = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2",
+                                    )
+                                    .bind(gender_str)  // Binding the gender string
+                                    .bind(user_id)
+                                    .execute(&**db)
+                                    .await;
+                }
+
                 match response {
                     Ok(_) => HttpResponse::Ok().json(ResponseToSend::<()> {
                         success: true,
