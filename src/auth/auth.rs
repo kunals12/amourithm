@@ -145,7 +145,7 @@ impl Register {
             }
             Ok(None) => handle_bad_request("OTP not found or expired"),
             Err(e) => {
-                println!("{}", e);
+                // println!("{}", e);
                 handle_internal_server_error(&e.to_string())
             }
         }
