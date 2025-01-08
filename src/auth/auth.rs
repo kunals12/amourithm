@@ -1,18 +1,17 @@
-use std::{fmt::format, sync::Arc};
+use std::sync::Arc;
 
-use crate::{
-    common::{handle_bad_request, handle_conflict_error, handle_internal_server_error, ResponseToSend},
-    connect_to_redis,
+use crate::common::{
+    handle_bad_request, handle_conflict_error, handle_internal_server_error, ResponseToSend,
 };
 
 use super::{
-    jwt::{generate_token, validate_token},
+    jwt::generate_token,
     utils::{decrypt_password, encrypt_password},
 };
 use actix_web::{
     cookie::{time::Duration, Cookie, SameSite},
     web::{Data, Json},
-    HttpRequest, HttpResponse, Responder,
+    HttpResponse, Responder,
 };
 use rand::Rng;
 use redis::{aio::MultiplexedConnection, AsyncCommands};
@@ -72,6 +71,7 @@ impl Register {
         let hash_password = encrypt_password(&user.password);
 
         let otp = Register::get_otp().to_string();
+        println!("{}", otp);
 
         // Store OTP in Redis with an expiration of 30 seconds
         let redis_key = format!("otp:{}", user.email); // Use a unique key
@@ -80,6 +80,7 @@ impl Register {
         let redis_key_set = redis_conn
             .set_ex::<&str, &str, ()>(&redis_key, &otp, 30)
             .await;
+
         // Store otp in redis cache for 30 sec
         match redis_key_set {
             Ok(_) => {
@@ -102,7 +103,7 @@ impl Register {
                         message: "Email Sent Successfully".to_string(),
                         data: None,
                     }),
-                    Err(e) => handle_internal_server_error(&e.to_string())
+                    Err(e) => handle_internal_server_error(&e.to_string()),
                 }
             }
             Err(_) => {
@@ -111,6 +112,7 @@ impl Register {
         }
     }
 
+    // Verify OTP
     pub async fn verify_otp(
         redis: Data<Arc<Mutex<MultiplexedConnection>>>,
         verify_otp_dto: Json<VerifyOtp>,
@@ -154,6 +156,7 @@ impl Register {
     //     type_name::<T>()
     // }
 
+    // Login User
     pub async fn login_user(db: Data<PgPool>, body: Json<Login>) -> impl Responder {
         let response =
             sqlx::query_as::<_, User>("SELECT id, password FROM users WHERE username = $1")
@@ -197,17 +200,6 @@ impl Register {
                     data: None,
                 })
             }
-        }
-    }
-
-    pub async fn get_user(db: Data<PgPool>, req: HttpRequest) -> impl Responder {
-        match validate_token(req).await {
-            Ok(user_id) => HttpResponse::Ok().json(ResponseToSend {
-                success: true,
-                message: "Token validated successfully".to_string(),
-                data: Some(user_id),
-            }),
-            Err(err) => err,
         }
     }
 

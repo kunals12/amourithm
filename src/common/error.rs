@@ -1,4 +1,4 @@
-use actix_web::{HttpResponse};
+use actix_web::HttpResponse;
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -28,6 +28,14 @@ pub fn handle_conflict_error(message: &str) -> HttpResponse {
     HttpResponse::Conflict().json(ResponseToSend::<()> {
         success: true,
         message: message.to_string(),
-        data: None
+        data: None,
+    })
+}
+
+pub fn handle_not_found_error(message: &str) -> HttpResponse {
+    HttpResponse::NotFound().json(ResponseToSend::<()> {
+        success: true,
+        message: message.to_string(),
+        data: None,
     })
 }
