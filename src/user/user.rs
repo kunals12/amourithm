@@ -33,8 +33,12 @@ pub struct User {
     age: Option<i32>,
     gender: Option<Gender>,
     bio: Option<String>,
+    city: Option<String>,
     profile_picture_url: Option<String>,
 }
+
+#[derive(Deserialize, FromRow, Serialize, Debug)]
+pub struct UserAddress {}
 
 impl User {
     async fn get_user_basic_data(
@@ -43,6 +47,7 @@ impl User {
         user_id: Uuid,
     ) -> Option<User> {
         let mut redis_conn = redis.lock().await;
+        // println!("user _id {:?}", user_id);
 
         let redis_key = format!("user_data:{}", user_id); // Use a unique key
         let get_user_data_from_redis: Result<Option<String>, redis::RedisError> =
@@ -59,7 +64,7 @@ impl User {
             }
             Ok(None) => {
                 let user_data = sqlx::query_as::<_, User>(
-                    "SELECT firstname, lastname, age, gender, bio, profile_picture_url FROM usersdata WHERE user_id = $1",
+                    "SELECT firstname, lastname, age, gender, bio, profile_picture_url, city FROM usersdata WHERE user_id = $1",
                 )
                 .bind(user_id) // `id` should be of the correct type (likely `Uuid`)
                 .fetch_one(&**db)
@@ -107,7 +112,7 @@ impl User {
                 if let Some(data) = user_data {
                     HttpResponse::Ok().json(ResponseToSend {
                         success: true,
-                        message: "Token validated successfully".to_string(),
+                        message: "User Data Fetch Successully".to_string(),
                         data: Some(data),
                     })
                 } else {
@@ -121,6 +126,7 @@ impl User {
     pub async fn insert_user_data(
         db: Data<PgPool>,
         req: HttpRequest,
+        redis: Data<Arc<Mutex<MultiplexedConnection>>>,
         user: Json<User>,
     ) -> impl Responder {
         match validate_token(req).await {
@@ -216,16 +222,51 @@ impl User {
                                     .await;
                 }
 
+                // Update City
+                if let Some(city) = &user.city {
+                    response = sqlx::query(
+                        "UPDATE usersdata SET city = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2"
+                    ).bind(city)
+                    .bind(user_id)
+                    .execute(&**db)
+                    .await;
+                }
+
+                // Update Bio
+                if let Some(bio) = &user.bio {
+                    response = sqlx::query(
+                        "UPDATE usersdata SET bio = $1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $2"
+                    ).bind(bio)
+                    .bind(user_id)
+                    .execute(&**db)
+                    .await;
+                }
+
                 match response {
-                    Ok(_) => HttpResponse::Ok().json(ResponseToSend::<()> {
-                        success: true,
-                        message: "User Data Updated Successfully".to_string(),
-                        data: None,
-                    }),
+                    Ok(_) => {
+                        let mut redis_conn = redis.lock().await;
+                        // println!("user _id {:?}", user_id);
+
+                        let redis_key = format!("user_data:{}", user_id); // Use a unique key
+                        let _: Result<i64, redis::RedisError> =
+                            redis_conn.del(redis_key.clone()).await;
+                        HttpResponse::Ok().json(ResponseToSend::<()> {
+                            success: true,
+                            message: "User Data Updated Successfully".to_string(),
+                            data: None,
+                        })
+                    }
                     Err(e) => handle_internal_server_error(&e.to_string()),
                 }
             }
             Err(e) => e,
         }
     }
+
+    // pub async fn update_user_address(
+    //     db: Data<PgPool>,
+    //     req: HttpRequest,
+    //     address: Json<UserAddress>,
+    // ) -> impl Responder {
+    // }
 }
